@@ -22,6 +22,11 @@ func NewID() ID {
 	return id[:]
 }
 
+func IDFromString(s string) ID {
+	id := sha1.Sum([]byte(s))
+	return id[:]
+}
+
 func (id ID) Equal(other ID) bool {
 	return bytes.Equal(id, other)
 }

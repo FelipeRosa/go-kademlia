@@ -14,6 +14,8 @@ message Request {
   oneof body {
     PingRequest ping = 2;
     FindNodeRequest find_node = 3;
+    StoreRequest store = 4;
+    FindValueRequest find_value = 5;
   }
 }
 
@@ -28,6 +30,8 @@ message Response {
   oneof body {
     PingResponse ping = 2;
     FindNodeResponse find_node = 3;
+    StoreResponse store = 4;
+    FindValueResponse find_value = 5;
   }
 }
 
@@ -45,4 +49,27 @@ message FindNodeRequest {
 
 message FindNodeResponse {
   repeated NodeInfo node_infos = 1;
+}
+
+message StoreRequest {
+  string key = 1;
+  bytes value = 2;
+}
+message StoreResponse {}
+
+message FindValueRequest {
+  string key = 1;
+}
+
+message FindValueValueResponse {
+  bytes value = 1;
+}
+message FindValueNodesResponse {
+  repeated NodeInfo node_infos = 1;
+}
+message FindValueResponse {
+  oneof val {
+    FindValueValueResponse value_response = 1;
+    FindValueNodesResponse nodes_response = 2;
+  }
 }

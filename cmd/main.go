@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"time"
 
@@ -12,7 +13,8 @@ import (
 func main() {
 	logger, _ := zap.NewProduction()
 
-	id := kad.NewID()
+	key := "test"
+	id := kad.IDFromString(key)
 
 	var hosts []kad.Host
 	for i := 0; i < 40; i++ {
@@ -42,10 +44,15 @@ func main() {
 	}
 	fmt.Println("bootstrapping took:", time.Since(start))
 
-	fmt.Println()
-	fmt.Println("FIND_NODE")
+	buf := make([]byte, 5)
+	rand.Read(buf)
 
 	start = time.Now()
-	fmt.Println(hosts[0].FindNode(context.Background(), id))
-	fmt.Println("find node took:", time.Since(start))
+	fmt.Println("storing:", buf)
+	hosts[0].Store(context.Background(), key, buf)
+	fmt.Println("STORE took:", time.Since(start))
+
+	start = time.Now()
+	fmt.Println(hosts[0].FindValue(context.Background(), key))
+	fmt.Println("FIND_VALUE took:", time.Since(start))
 }
