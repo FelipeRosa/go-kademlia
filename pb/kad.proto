@@ -1,0 +1,48 @@
+syntax = "proto3";
+package kad;
+
+option go_package = "gen/kad_pb";
+
+message RequestHeader {
+  bytes requester_id = 1;
+  repeated string requester_local_addresses = 2;
+}
+
+message Request {
+  RequestHeader header = 1;
+
+  oneof body {
+    PingRequest ping = 2;
+    FindNodeRequest find_node = 3;
+  }
+}
+
+message ResponseHeader {
+  bytes responder_id = 1;
+  repeated string responder_local_addresses = 2;
+}
+
+message Response {
+  ResponseHeader header = 1;
+
+  oneof body {
+    PingResponse ping = 2;
+    FindNodeResponse find_node = 3;
+  }
+}
+
+message NodeInfo {
+  bytes id = 1;
+  repeated string addresses = 2;
+}
+
+message PingRequest {}
+message PingResponse {}
+
+message FindNodeRequest {
+  bytes node_id = 1;
+}
+
+message FindNodeResponse {
+  repeated NodeInfo node_infos = 1;
+}
