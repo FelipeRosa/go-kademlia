@@ -96,7 +96,7 @@ func (kb *KBuckets) KClosestTo(id ID) []PeerInfo {
 
 	var kClosest []PeerInfo
 	for up, down := d, d-1; ; {
-		if up < 160 {
+		if up < IDLength*8 {
 			for _, entry := range kb.entries[up] {
 				kClosest = append(kClosest, entry)
 			}
@@ -120,4 +120,13 @@ func (kb *KBuckets) KClosestTo(id ID) []PeerInfo {
 
 func (kb *KBuckets) Entries() [][]PeerInfo {
 	return kb.entries
+}
+
+func (kb *KBuckets) Size() int {
+	var size int
+	for _, bucket := range kb.entries {
+		size += len(bucket)
+	}
+
+	return size
 }

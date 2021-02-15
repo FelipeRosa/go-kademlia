@@ -229,6 +229,10 @@ func (n *host) FindNode(ctx context.Context, nodeID ID) ([]PeerInfo, error) {
 	nodeQueue.Enqueue(n.kBuckets.KClosestTo(nodeID)...)
 
 	closestPeerInfos := make([]PeerInfo, 0, 20)
+	closestPeerInfos = append(closestPeerInfos, PeerInfo{
+		ID:       n.ID(),
+		AddrInfo: n.LocalAddrInfo(),
+	})
 	var closestPeerInfosLock sync.Mutex
 
 	var foundNode *PeerInfo
@@ -270,6 +274,10 @@ func (n *host) FindNode(ctx context.Context, nodeID ID) ([]PeerInfo, error) {
 						},
 					},
 				}
+				n.logger.Debug("FIND_NODE trying peer",
+					zap.String("peer_id", peer.ID.String()),
+					zap.Strings("peer_addresses", peer.AddrInfo.Addresses),
+				)
 				res, err := n.peerRequest(ctx, peer.AddrInfo, req)
 				if err != nil {
 					n.logger.Warn(
@@ -289,11 +297,6 @@ func (n *host) FindNode(ctx context.Context, nodeID ID) ([]PeerInfo, error) {
 
 				var resPeers []PeerInfo
 				for _, nodeInfo := range resBody.GetNodeInfos() {
-					// let's not add ourselves to the peer queue
-					if n.ID().Equal(nodeInfo.Id) {
-						continue
-					}
-
 					resPeers = append(resPeers, PeerInfo{
 						ID:       nodeInfo.Id,
 						AddrInfo: PeerAddrInfo{Addresses: nodeInfo.Addresses},
@@ -344,9 +347,14 @@ func (n *host) FindNode(ctx context.Context, nodeID ID) ([]PeerInfo, error) {
 func (n *host) Store(ctx context.Context, key string, value []byte) error {
 	id := IDFromString(key)
 
+	n.logger.Debug("STORE finding closest peers")
 	closestNodes, err := n.FindNode(ctx, id)
 	if err != nil {
 		return err
+	}
+
+	if len(closestNodes) == 0 {
+		return errors.New("no peers")
 	}
 
 	req := &kad_pb.Request{
@@ -362,10 +370,25 @@ func (n *host) Store(ctx context.Context, key string, value []byte) error {
 		},
 	}
 
-	for _, node := range closestNodes {
-		n.peerRequest(ctx, node.AddrInfo, req)
+	var successes int
+	for _, peer := range closestNodes {
+		n.logger.Debug("sending STORE to peer",
+			zap.String("peer_id", peer.ID.String()),
+			zap.Strings("peer_addresses", peer.AddrInfo.Addresses),
+		)
+		if _, err := n.peerRequest(ctx, peer.AddrInfo, req); err == nil {
+			successes++
+		}
 	}
 
+	if successes == 0 {
+		return errors.New("all peer requests failed")
+	}
+	n.logger.Debug(
+		"STORE stored value",
+		zap.Int("stored_count", successes),
+		zap.Int("total_peer_count", n.kBuckets.Size()),
+	)
 	return nil
 }
 
@@ -414,6 +437,10 @@ func (n *host) FindValue(ctx context.Context, key string) ([]byte, bool, error) 
 						},
 					},
 				}
+				n.logger.Debug("FIND_VALUE trying peer",
+					zap.String("peer_id", peer.ID.String()),
+					zap.Strings("peer_addresses", peer.AddrInfo.Addresses),
+				)
 				res, err := n.peerRequest(ctx, peer.AddrInfo, req)
 				if err != nil {
 					n.logger.Warn(
@@ -435,11 +462,6 @@ func (n *host) FindValue(ctx context.Context, key string) ([]byte, bool, error) 
 				case *kad_pb.FindValueResponse_NodesResponse:
 					var resPeers []PeerInfo
 					for _, nodeInfo := range body.NodesResponse.GetNodeInfos() {
-						// let's not add ourselves to the peer queue
-						if n.ID().Equal(nodeInfo.Id) {
-							continue
-						}
-
 						resPeers = append(resPeers, PeerInfo{
 							ID:       nodeInfo.Id,
 							AddrInfo: PeerAddrInfo{Addresses: nodeInfo.Addresses},
@@ -449,6 +471,11 @@ func (n *host) FindValue(ctx context.Context, key string) ([]byte, bool, error) 
 
 				case *kad_pb.FindValueResponse_ValueResponse:
 					foundValueLock.Lock()
+					n.logger.Debug("found value",
+						zap.String("peer_id", peer.ID.String()),
+						zap.Strings("peer_addresses", peer.AddrInfo.Addresses),
+					)
+
 					foundValue = true
 					value = body.ValueResponse.GetValue()
 					foundValueLock.Unlock()
@@ -584,7 +611,7 @@ func (n *host) handlePeerConn(peerConn *PeerConn) {
 			logger.Debug("done handling request")
 
 		case *kad_pb.Request_FindValue:
-			logger = logger.With(zap.String("request_type", "STORE"))
+			logger = logger.With(zap.String("request_type", "FIND_VALUE"))
 
 			res := &kad_pb.Response{
 				Header: &kad_pb.ResponseHeader{

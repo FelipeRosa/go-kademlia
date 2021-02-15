@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
+	"flag"
 	"fmt"
 	"time"
 
@@ -11,18 +13,19 @@ import (
 )
 
 func main() {
-	logger, _ := zap.NewProduction()
+	logLevel := zap.LevelFlag("log.level", zap.InfoLevel, "Sets the logger level")
+	flag.Parse()
 
-	key := "test"
-	id := kad.IDFromString(key)
+	loggerCfg := zap.NewDevelopmentConfig()
+	loggerCfg.Level.SetLevel(*logLevel)
+	logger, _ := loggerCfg.Build()
 
 	var hosts []kad.Host
-	for i := 0; i < 40; i++ {
+	for i := 0; i < 400; i++ {
 		h, err := kad.NewHost("0.0.0.0:", kad.WithLogger(logger))
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(h.ID(), h.ID().DistanceTo(id), h.LocalAddrInfo())
 		hosts = append(hosts, h)
 	}
 	defer func() {
@@ -44,15 +47,31 @@ func main() {
 	}
 	fmt.Println("bootstrapping took:", time.Since(start))
 
-	buf := make([]byte, 5)
-	rand.Read(buf)
+	for i, h := range hosts {
+		key := fmt.Sprintf("test_%d", i)
 
-	start = time.Now()
-	fmt.Println("storing:", buf)
-	hosts[0].Store(context.Background(), key, buf)
-	fmt.Println("STORE took:", time.Since(start))
+		value := make([]byte, 5)
+		rand.Read(value)
 
-	start = time.Now()
-	fmt.Println(hosts[0].FindValue(context.Background(), key))
-	fmt.Println("FIND_VALUE took:", time.Since(start))
+		start = time.Now()
+		fmt.Println("storing:", value)
+		if err := h.Store(context.Background(), key, value); err != nil {
+			panic(err)
+		}
+		fmt.Println("STORE took:", time.Since(start))
+
+		start = time.Now()
+		valueFound, found, err := h.FindValue(context.Background(), key)
+		if err != nil {
+			panic(err)
+		}
+		if !found {
+			panic("value not found")
+		}
+		fmt.Println("FIND_VALUE took:", time.Since(start))
+
+		if !bytes.Equal(value, valueFound) {
+			panic("wrong value returned")
+		}
+	}
 }
